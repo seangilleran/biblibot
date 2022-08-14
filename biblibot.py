@@ -25,10 +25,10 @@ while True:
     item = random.choice(items)
 
     type = item["data"]["itemType"]
-    if type == "book":
+    if type.startswith("book"):
         text = "📕"
-    elif type == "bookSection":
-        text = "📖"
+    elif type.startswith("magazine"):
+        text = "📔"
     elif type == "webpage":
         text = "🌐"
     else:
