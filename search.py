@@ -6,15 +6,18 @@ from urllib import parse as urlparse
 
 import tweepy
 
-query = "#BlackLivesMatter -is:retweet"
-filename = "blacklivesmatter.json"
 
-# Connect to Twitter and perform query.
-bearer_token = os.getenv("BIBBOT_BEARER_TOKEN")
+query = "#BlackLivesMatter -is:retweet"
+max_results = 15
+bearer_token = "AAAAAAAAAAAAAAAAAAAAANqJfwEAAAAAMy8ZIiHw0wkOAc%2FbZuYBKeuWGls%3DnPPUp0vDf4T54nxc1Ln2vuZYGS6CSKmDrvBTXdqlTCh3ozukBk"
+
+query_id = f"{uuid.uuid4()}"
+query_timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+
 client = tweepy.Client(bearer_token)
 response = client.search_recent_tweets(
     query,
-    max_results=100,
+    max_results=max_results,
     expansions="author_id,attachments.media_keys",
     tweet_fields="created_at,public_metrics,attachments",
     user_fields="username,name",
@@ -22,15 +25,22 @@ response = client.search_recent_tweets(
 )
 
 tweets = []
-for tweet in response.data:
+for tweet_data in response.data:
 
-    # Find author info.
-    author = next(u.data for u in response.includes["users"] if u.id == tweet.author_id)
+    # Get Tweet.
+    tweet = {
+        "id": tweet_data.id,
+        "created_at": tweet_data.created_at.isoformat(),
+        "user": next(
+            u.data for u in response.includes["users"] if u.id == tweet_data.author_id
+        ),
+        "text": tweet_data.text,
+    }
 
     # Get attachment(s), if any.
     attachments = []
     try:
-        for media_key in tweet.attachments["media_keys"]:
+        for media_key in tweet_data.attachments["media_keys"]:
             attachments.append(
                 next(
                     a.data
@@ -38,33 +48,32 @@ for tweet in response.data:
                     if a.media_key == media_key
                 )
             )
+        tweet["attachments"] = attachments
     except TypeError:
-        attachments = None
         pass
 
-    # Compile.
-    tweets.append(
+    # Get metrics & URL.
+    tweet.update(
         {
-            "id": tweet.id,
-            "author_id": tweet.author_id,
-            "user": author,
-            "created_at": tweet.created_at.isoformat(),
-            "text": tweet.text,
-            "attachments": attachments,
-            "public_metrics": tweet.public_metrics,
-            "url": f'https://twitter.com/{author["username"]}/status/{tweet.id}',
+            "public_metrics": tweet_data.public_metrics,
+            "url": f'https://twitter.com/{tweet["user"]["username"]}/status/{tweet["id"]}',
         }
     )
 
+    tweets.append(tweet)
+
 # Compile all tweets with query metadata.
 data = {
-    "id": f"{uuid.uuid4()}",
+    "id": f"{query_id}",
+    "timestamp": query_timestamp,
     "query": query,
     "url": f"https://twitter.com/search?q={urlparse.quote(query)}",
-    "timestamp": datetime.now().isoformat(),
-    "results": tweets,
+    "tweets": tweets,
 }
 
 # Save to file.
+filename = f"{query_timestamp}_{query_id}.json"
 with open(filename, "w") as f:
     json.dump(data, f, indent=2)
+
+print("Done!")
